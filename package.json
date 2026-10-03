@@ -1,0 +1,36 @@
+{
+  "name": "canisharemyscreen",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@mediabunny/aac-encoder": "^1.61.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "lucide-react": "^1.50.0",
+    "mediabunny": "^1.61.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/dom-webcodecs": "^0.1.19",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/wicg-file-system-access": "^2023.10.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.86.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
+  }
+}
