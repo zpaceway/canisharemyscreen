@@ -53,7 +53,7 @@ BACKGROUND_TEST=1 npm test -- --grep 'another tab'
 
 ## Browser and storage constraints
 
-Recording targets desktop Chrome and Edge over HTTPS or localhost. System audio depends on the chosen source, browser, and operating system; selecting a source never guarantees an audio track. Enable “Share audio” in the browser picker when available.
+Recording targets desktop Chrome and Edge over HTTPS or localhost. System audio depends on the chosen source, browser, and operating system; selecting a source never guarantees an audio track. The capture request explicitly asks the picker to offer system/window audio where supported. Enable “Share audio” in the browser picker when available. For browser audio, select the tab playing it; this captures that tab, not every application. Audio settings show a separate screen-audio level meter when a track is provided, or a persistent missing-track message with the volume slider disabled. Increasing volume cannot enable capture when the browser supplies no audio track.
 
 OPFS is browser-managed storage subject to quota and disk availability. Persistence is requested but may be denied. Clearing site data removes recovery copies. Recovery requires reopening the same origin (scheme, hostname, and port). Saved sessions remain until explicitly discarded, including after successful export.
 

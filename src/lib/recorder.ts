@@ -24,6 +24,8 @@ export class Recorder {
   private systemGain?: GainNode
   private analyser?: AnalyserNode
   private meterData?: Uint8Array<ArrayBuffer>
+  private systemAnalyser?: AnalyserNode
+  private systemMeterData?: Uint8Array<ArrayBuffer>
   private deviceSignature = ''
   private deviceGeneration = 0
   private mediaRecorder?: MediaRecorder
@@ -83,10 +85,17 @@ export class Recorder {
       throw new Error('Screen recording needs a supported desktop browser. Open this page in Chrome or Edge over HTTPS or localhost.')
     }
     if (!navigator.storage?.getDirectory) throw new Error('This browser has no disk-backed recording storage. Use desktop Chrome or Edge.')
-    this.display = await navigator.mediaDevices.getDisplayMedia({
+    // These are picker hints, not guarantees. Unsupported browsers ignore them.
+    const captureOptions: DisplayMediaStreamOptions & {
+      systemAudio: 'include' | 'exclude'; windowAudio: 'system' | 'exclude';
+      audio: boolean | (MediaTrackConstraints & { suppressLocalAudioPlayback: boolean });
+    } = {
       video: { frameRate: { ideal: this.settings.fps }, displaySurface: 'monitor' },
-      audio: this.settings.systemAudio,
-    })
+      audio: this.settings.systemAudio ? { suppressLocalAudioPlayback: false } : false,
+      systemAudio: this.settings.systemAudio ? 'include' : 'exclude',
+      windowAudio: this.settings.systemAudio ? 'system' : 'exclude',
+    }
+    this.display = await navigator.mediaDevices.getDisplayMedia(captureOptions)
     if (this.disposed) { this.display.getTracks().forEach(t => t.stop()); return }
     const track = this.display.getVideoTracks()[0]
     this.sourceName = track.label || 'Selected screen'
@@ -150,6 +159,8 @@ export class Recorder {
   private async setupAudio() {
     await this.context?.close()
     this.context = undefined; this.analyser = undefined; this.destination = undefined
+    this.micGain = undefined; this.systemGain = undefined; this.meterData = undefined
+    this.systemAnalyser = undefined; this.systemMeterData = undefined
     const micTrack = this.devices?.getAudioTracks()[0]
     const systemTrack = this.display?.getAudioTracks()[0]
     if (!micTrack && !systemTrack) return
@@ -168,16 +179,22 @@ export class Recorder {
     if (systemTrack) {
       this.systemGain = context.createGain()
       this.systemGain.gain.value = this.settings.systemAudio ? this.settings.systemVolume / 100 : 0
-      context.createMediaStreamSource(new MediaStream([systemTrack])).connect(this.systemGain).connect(this.destination)
+      this.systemAnalyser = context.createAnalyser()
+      this.systemAnalyser.fftSize = 256
+      this.systemMeterData = new Uint8Array(256)
+      context.createMediaStreamSource(new MediaStream([systemTrack])).connect(this.systemGain).connect(this.systemAnalyser).connect(this.destination)
     }
     await context.resume()
   }
-  meter() {
-    if (!this.analyser || !this.meterData) return 0
-    this.analyser.getByteTimeDomainData(this.meterData)
+  meter(input: 'mic' | 'system' = 'mic') {
+    if (this.disposed) return 0
+    const analyser = input === 'system' ? this.systemAnalyser : this.analyser
+    const data = input === 'system' ? this.systemMeterData : this.meterData
+    if (!analyser || !data) return 0
+    analyser.getByteTimeDomainData(data)
     let sum = 0
-    for (const n of this.meterData) sum += ((n - 128) / 128) ** 2
-    return Math.min(1, Math.sqrt(sum / this.meterData.length) * 4)
+    for (const n of data) sum += ((n - 128) / 128) ** 2
+    return Math.min(1, Math.sqrt(sum / data.length) * 4)
   }
   private draw() {
     const ctx = this.canvas.getContext('2d', { alpha: false })!

@@ -22,6 +22,7 @@ export function useStudio() {
   const [recoveries, setRecoveries] = useState<Session[]>(() => { try { return listSessions() } catch { return [] } })
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [sourceName, setSourceName] = useState('')
+  const [hasSystemAudio, setHasSystemAudio] = useState(false)
   const [progress, setProgress] = useState(0)
   const [deviceBusy, setDeviceBusy] = useState(false)
   const [canCancelExport, setCanCancelExport] = useState(false)
@@ -121,12 +122,12 @@ export function useStudio() {
 
   async function chooseScreen() {
     if (!['idle', 'ready'].includes(statusRef.current)) return
-    setError(''); setNotice(''); setStatus('choosing')
+    setError(''); setNotice(''); setStatus('choosing'); setHasSystemAudio(false)
     engine.current?.dispose()
     const recorder = new Recorder(settingsRef.current, {
       onStats: (time, size) => { setSeconds(time); setBytes(size) },
       onWarning: setNotice,
-      onSourceLost: () => { countdownToken.current++; setStatus('idle'); setSourceName(''); setNotice('Screen sharing ended. Choose your screen to try again.') },
+      onSourceLost: () => { countdownToken.current++; setStatus('idle'); setSourceName(''); setHasSystemAudio(false); setNotice('Screen sharing ended. Choose your screen to try again.') },
       onStopped: saved => {
         setSession(saved); setStatus('review'); refreshRecoveries()
       },
@@ -136,7 +137,7 @@ export function useStudio() {
       await recorder.prepare()
       if (!recorder.hasLiveSource()) throw new Error('Screen sharing ended. Choose your screen again.')
       previewHost.current?.replaceChildren(recorder.canvas)
-      setSourceName(recorder.sourceName); setStatus('ready'); void refreshDevices()
+      setSourceName(recorder.sourceName); setHasSystemAudio(recorder.hasSystemAudio); setStatus('ready'); void refreshDevices()
     } catch (e) {
       recorder.dispose(); setStatus('idle'); setSourceName(''); setError(errorMessage(e))
     }
@@ -169,7 +170,7 @@ export function useStudio() {
   function stop() { setStatus('stopping'); void engine.current?.stop() }
   function recordAgain() {
     engine.current?.dispose(); engine.current = null
-    setSession(null); setReviewUrl(''); setStatus('idle'); setSeconds(0); setBytes(0)
+    setSession(null); setReviewUrl(''); setStatus('idle'); setSeconds(0); setBytes(0); setHasSystemAudio(false)
     setError(''); setNotice(''); refreshRecoveries()
   }
   async function recover(saved: Session) {
@@ -215,11 +216,11 @@ export function useStudio() {
     if (node && engine.current) node.replaceChildren(engine.current.canvas)
   }, [])
   const getCanvas = useCallback(() => engine.current?.canvas, [])
-  const getMeter = useCallback(() => engine.current?.meter() || 0, [])
+  const getMeter = useCallback((input: 'mic' | 'system' = 'mic') => engine.current?.meter(input) || 0, [])
   const cancelExportJob = useCallback(() => cancelExport.current?.(), [])
   return {
     settings, update, status, notice, error, setError, setNotice, seconds, bytes, countdown,
-    session, reviewUrl, recoveries, devices, sourceName, progress, deviceBusy, exportSupport, probeExport, resetSettings,
+    session, reviewUrl, recoveries, devices, sourceName, hasSystemAudio, progress, deviceBusy, exportSupport, probeExport, resetSettings,
     attachPreview, getCanvas, getMeter,
     chooseScreen, start, cancelCountdown, pause, stop, recordAgain,
     recover, discard, download, canCancelExport, cancelExportJob,

@@ -26,17 +26,18 @@ function Section({ title, hint, icon: Icon, children, id, openSection, setOpenSe
     <div id={`settings-${id}`} hidden={!open} className="section-content">{children}</div>
   </section>
 }
-function MicMeter({ studio }: { studio: Studio }) {
+function AudioMeter({ studio, input }: { studio: Studio; input: 'mic' | 'system' }) {
   const [level, setLevel] = useState(0)
   const { getMeter } = studio
-  useEffect(() => { const interval = setInterval(() => setLevel(getMeter()), 100); return () => clearInterval(interval) }, [getMeter])
-  return <div className="mic-meter" aria-label="Microphone input level"><span>Input level</span><div>{Array.from({ length: 16 }, (_, i) => <i key={i} className={i / 16 < level ? 'lit' : ''} />)}</div></div>
+  useEffect(() => { const interval = setInterval(() => setLevel(getMeter(input)), 100); return () => clearInterval(interval) }, [getMeter, input])
+  return <div className="mic-meter" aria-label={input === 'mic' ? 'Microphone input level' : 'Screen audio input level'}><span>{input === 'mic' ? 'Input level' : 'Screen level'}</span><div>{Array.from({ length: 16 }, (_, i) => <i key={i} className={i / 16 < level ? 'lit' : ''} />)}</div></div>
 }
 export function SettingsPanel({ studio, openSection, setOpenSection, onDiscard }: { studio: Studio; openSection: string | null; setOpenSection: (id: string | null) => void; onDiscard: (session: Session) => void }) {
   const { settings: s, update, status } = studio
   const live = ['countdown', 'starting', 'recording', 'paused', 'stopping'].includes(status)
   const devicesLocked = live || status === 'choosing' || studio.deviceBusy
   const reviewing = status === 'review' || status === 'exporting'
+  const missingScreenAudio = s.systemAudio && (status === 'ready' || live) && !studio.hasSystemAudio
   const cameras = studio.devices.filter(d => d.kind === 'videoinput')
   const mics = studio.devices.filter(d => d.kind === 'audioinput')
   const deviceOptions = (list: MediaDeviceInfo[], label: string) => list.filter(d => d.deviceId).map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `${label} ${i + 1}`}</option>)
@@ -77,13 +78,17 @@ export function SettingsPanel({ studio, openSection, setOpenSection, onDiscard }
         {s.mic ? <>
           <Select label="Microphone device" value={s.micDevice} disabled={devicesLocked || reviewing} onChange={v => update('micDevice', v)}><option value="">Default microphone</option>{deviceOptions(mics, 'Microphone')}</Select>
           <Range label="Mic volume" value={s.micVolume} disabled={reviewing} onChange={v => update('micVolume', v)} />
-          <MicMeter studio={studio} />
+          <AudioMeter studio={studio} input="mic" />
           <Toggle label="Noise suppression" checked={s.noiseSuppression} disabled={devicesLocked || reviewing} onChange={v => update('noiseSuppression', v)} />
           <Toggle label="Echo cancellation" checked={s.echoCancellation} disabled={devicesLocked || reviewing} onChange={v => update('echoCancellation', v)} />
         </> : null}
         <Toggle label="Screen / system audio" checked={s.systemAudio} disabled={live || reviewing || status === 'choosing'} onChange={v => update('systemAudio', v)} />
-        {s.systemAudio ? <Range label="Screen audio volume" value={s.systemVolume} disabled={reviewing} onChange={v => update('systemVolume', v)} /> : null}
-        <p className="field-note">Select a supported source and enable “Share audio” in the browser picker.{status === 'ready' ? ' Choose your screen again after changing this toggle.' : ''}</p>
+        {s.systemAudio ? <>
+          <Range label="Screen audio volume" value={s.systemVolume} disabled={reviewing || missingScreenAudio} onChange={v => update('systemVolume', v)} />
+          {studio.hasSystemAudio && !reviewing ? <AudioMeter studio={studio} input="system" /> : null}
+          {missingScreenAudio ? <p className="field-note" role="status">No screen audio track was shared. Volume cannot enable capture. Choose your screen again, select a browser tab playing audio, and enable “Share audio”. Entire-screen and window audio depend on your browser and operating system.</p> : null}
+        </> : null}
+        <p className="field-note">For browser audio, select the tab playing it and enable “Share audio” in the picker. This captures that tab, not every app on your computer.{status === 'ready' ? ' Choose your screen again after changing this toggle.' : ''}</p>
       </Section>
       <Section openSection={openSection} setOpenSection={setOpenSection} id="export" title="Export" hint={`${s.format.toUpperCase()} · ${s.compression === 'original' ? 'Original' : s.compression === 'small' ? 'Small file' : 'Balanced'}`} icon={Video}>
         <Select label="Video format" value={s.format} disabled={status === 'exporting'} onChange={v => update('format', v as Settings['format'])}><option value="webm">WebM</option><option value="mp4" disabled={studio.exportSupport?.mp4 === false}>MP4{studio.exportSupport?.mp4 === false ? ' · Not supported' : ''}</option></Select>

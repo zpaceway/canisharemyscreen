@@ -7,7 +7,8 @@ import { createServer } from 'node:net'
 async function installScreen(page: Page, options: { audio?: boolean; camera?: boolean; deny?: boolean } = {}) {
   await page.addInitScript(({ audio, camera, deny }) => {
     const timers: number[] = []
-    Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: async () => {
+    Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: async (constraints: DisplayMediaStreamOptions) => {
+      Object.assign(window, { __testDisplayOptions: constraints })
       if (deny) throw new DOMException('Permission denied', 'NotAllowedError')
       const canvas = document.createElement('canvas')
       canvas.width = 640; canvas.height = 360
@@ -99,6 +100,39 @@ test('denied screen access shows a useful error and can retry', async ({ page })
   await page.getByRole('button', { name: 'Choose a screen', exact: true }).click()
   await expect(page.getByText('Permission wasn’t granted.', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Choose a screen', exact: true })).toBeEnabled()
+})
+test('screen audio requests capture options and has its own working volume meter', async ({ page }) => {
+  await installScreen(page, { audio: true })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Choose a screen', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeEnabled()
+  expect(await page.evaluate(() => (window as unknown as { __testDisplayOptions: unknown }).__testDisplayOptions)).toMatchObject({
+    audio: { suppressLocalAudioPlayback: false }, systemAudio: 'include', windowAudio: 'system',
+  })
+  await page.getByRole('button', { name: 'Audio Screen', exact: true }).click()
+  const meter = page.getByLabel('Screen audio input level')
+  await expect(meter.locator('.lit').first()).toBeVisible()
+  await page.getByLabel('Screen audio volume', { exact: true }).fill('0')
+  await expect(meter.locator('.lit')).toHaveCount(0)
+  await page.getByLabel('Screen audio volume', { exact: true }).fill('100')
+  await expect(meter.locator('.lit').first()).toBeVisible()
+})
+test('missing screen audio stays visible and explains why volume cannot fix it', async ({ page }) => {
+  await installScreen(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Audio Off', exact: true }).click()
+  await page.getByLabel('Screen / system audio', { exact: true }).check()
+  await page.getByRole('button', { name: 'Choose a screen', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeEnabled()
+  const message = page.getByText('No screen audio track was shared.', { exact: false })
+  await expect(message).toBeVisible()
+  await expect(page.getByLabel('Screen audio volume', { exact: true })).toBeDisabled()
+  await page.waitForTimeout(5500)
+  await expect(message).toBeVisible()
+  await page.getByLabel('Screen / system audio', { exact: true }).uncheck()
+  await expect(message).not.toBeVisible()
+  await page.getByLabel('Screen / system audio', { exact: true }).check()
+  await expect(message).toBeVisible()
 })
 test('screen and camera playback stay connected until capture is disposed', async ({ page }) => {
   await installScreen(page, { camera: true })
